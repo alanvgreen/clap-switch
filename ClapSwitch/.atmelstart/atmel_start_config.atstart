@@ -1,0 +1,347 @@
+format_version: '2'
+name: Clap Switch
+versions:
+  api: '1.0'
+  backend: 1.5.122
+  commit: 820baecf7dd115d94b0d42ee3b0b9d6ba2da7113
+  content: 1.0.1465
+  content_pack_name: acme-packs-all
+  format: '2'
+  frontend: 1.5.1826
+board:
+  identifier: CustomBoard
+  device: ATtiny3217-MFR
+details: null
+application: null
+middlewares: {}
+drivers:
+  CLKCTRL:
+    user_label: CLKCTRL
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::CLKCTRL::driver_config_definition::CLKCTRL::Drivers:CLKCTRL:Init
+    functionality: System
+    api: Drivers:CLKCTRL:Init
+    configuration:
+      clkctrl_mclkctrla_cksel: 20MHz Internal Oscillator (OSC20M)
+      clkctrl_mclkctrla_clkout: false
+      clkctrl_mclkctrlb_pdiv: '2'
+      clkctrl_mclkctrlb_pen: false
+      clkctrl_mclklock_locken: false
+      clkctrl_osc16mctrla_runstdby: false
+      clkctrl_osc20mctrla_runstdby: false
+      clkctrl_osc32kctrla_runstdby: false
+      clkctrl_xosc32kctrla_csut: 1k cycles
+      clkctrl_xosc32kctrla_runstdby: false
+      clkctrl_xosc32kctrla_sel: false
+      cpu_clock_source: Main Clock (CLK_MAIN)
+      enable_clk_per: true
+      enable_extclk: true
+      enable_main: true
+      enable_osc16m: true
+      enable_osc20m: true
+      enable_osculp1k: true
+      enable_osculp32k: true
+      enable_tcd0: true
+      enable_xosc32kctrla: false
+      extosc: 32768
+      nvm_clock_source: Main Clock (CLK_MAIN)
+      osculp1k_clksel_clksel: 32KHz Internal Ultra Low Power Oscillator (OSCULP32K)
+      ram_clock_source: Main Clock (CLK_MAIN)
+      tcd0_ctrla_clksel: 20MHz Internal Oscillator (OSC20M)
+      tcd0_ctrla_syncpres: '1'
+      xosc32kctrla_arch_enable: false
+    optional_signals: []
+    variant: null
+    clocks:
+      domain_group:
+        nodes:
+        - name: CPU
+          input: CPU
+          external: false
+          external_frequency: 0
+        configuration: {}
+  RTC_0:
+    user_label: RTC_0
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::RTC::driver_config_definition::RTC::Drivers:RTC:Init
+    functionality: RTC
+    api: Drivers:RTC:Init
+    configuration:
+      enable_rtc: true
+      inc_isr_harness: true
+      rtc_clksel_clksel: 32KHz Internal Ultra Low Power Oscillator (OSCULP32K)
+      rtc_cmp: 0
+      rtc_cnt: 0
+      rtc_ctrla_prescaler: '1'
+      rtc_ctrla_rtcen: false
+      rtc_ctrla_runstdby: false
+      rtc_dbgctrl_dbgrun: false
+      rtc_intctrl_cmp: false
+      rtc_intctrl_ovf: false
+      rtc_per: 65535
+      rtc_pitctrla_period: RTC Clock Cycles 32
+      rtc_pitctrla_piten: true
+      rtc_pitdbgctrl_dbgrun: false
+      rtc_pitintctrl_pi: true
+    optional_signals: []
+    variant: null
+    clocks:
+      domain_group:
+        nodes:
+        - name: RTC
+          input: RTC Clock (CLK_RTC)
+          external: false
+          external_frequency: 0
+        configuration:
+          rtc_clock_source: RTC Clock (CLK_RTC)
+  VREF_0:
+    user_label: VREF_0
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::VREF::driver_config_definition::VREF::Drivers:VREF:Init
+    functionality: VREF
+    api: Drivers:VREF:Init
+    configuration:
+      adc0_force_enable: true
+      adc0_voltage_reference: Voltage reference at 2.5V
+      adc1_force_enable: false
+      adc1_voltage_reference: Voltage reference at 0.55V
+      dac0_force_enable: false
+      dac0_voltage_reference: Voltage reference at 0.55V
+      dac1_force_enable: false
+      dac1_voltage_reference: Voltage reference at 0.55V
+      dac2_force_enable: false
+      dac2_voltage_reference: Voltage reference at 0.55V
+    optional_signals: []
+    variant: null
+    clocks:
+      domain_group: null
+  ADC_0:
+    user_label: ADC_0
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::ADC0::driver_config_definition::ADC.Basic::Drivers:ADC:Basic
+    functionality: ADC
+    api: Drivers:ADC:Basic
+    configuration:
+      adc_calib_dutycyc: 50% Duty cycle
+      adc_ctrla_enable: true
+      adc_ctrla_freerun: false
+      adc_ctrla_ressel: 10-bit mode
+      adc_ctrla_runstby: false
+      adc_ctrlb_sampnum: 1 ADC sample
+      adc_ctrlc_presc: CLK_PER divided by 8
+      adc_ctrlc_refsel: Internal reference
+      adc_ctrlc_sampcap: false
+      adc_ctrld_asdv: false
+      adc_ctrld_initdly: Delay 0 CLK_ADC cycles
+      adc_ctrld_sampdly: 0
+      adc_ctrle_wincm: No Window Comparison
+      adc_dbgctrl_dbgrun: false
+      adc_evctrl_startei: false
+      adc_intctrl_resrdy: false
+      adc_intctrl_wcmp: false
+      adc_muxpos_muxpos: ADC input pin 6
+      adc_sampctrl_samplen: 0
+      adc_sampling_config: false
+      adc_winht: 0
+      adc_winlt: 0
+    optional_signals:
+    - identifier: ADC_0:AIN/6
+      pad: PA6
+      mode: Enabled
+      configuration: null
+      definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::optional_signal_definition::ADC0.AIN.6
+      name: ADC0/AIN/6
+      label: AIN/6
+    variant: null
+    clocks:
+      domain_group:
+        nodes:
+        - name: ADC
+          input: Main Clock (CLK_MAIN)
+          external: false
+          external_frequency: 0
+        configuration:
+          adc_clock_source: Main Clock (CLK_MAIN)
+  USART_0:
+    user_label: USART_0
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::USART0::driver_config_definition::Async.IRQ.Mode::Drivers:USART:Basic
+    functionality: USART
+    api: Drivers:USART:Basic
+    configuration:
+      baud_rate: 9600
+      ctrla_abeie: false
+      ctrla_dreie: false
+      ctrla_lbme: false
+      ctrla_rs485: RS485 Mode disabled
+      ctrla_rxcie: true
+      ctrla_rxsie: false
+      ctrla_txcie: false
+      ctrlb_mpcm: false
+      ctrlb_odme: false
+      ctrlb_rxen: true
+      ctrlb_rxmode: Normal mode
+      ctrlb_sfden: false
+      ctrlb_txen: true
+      ctrlc_chsize: 'Character size: 8 bit'
+      ctrlc_cmode: Asynchronous USART
+      ctrlc_pmode: No Parity
+      ctrlc_sbmode: 1 stop bit
+      ctrlc_ucpha: false
+      ctrlc_udord: false
+      dbgctrl_abmbp: false
+      dbgctrl_dbgrun: false
+      driver_rx_buffer_size: '8'
+      driver_tx_buffer_size: '8'
+      evctrl_irei: false
+      printf_support: false
+      rxplctrl_rxpl: 0
+      txplctrl_txpl: 0
+    optional_signals: []
+    variant:
+      specification: CMODE=0
+      required_signals:
+      - name: USART0/RXD
+        pad: PB3
+        label: RXD
+      - name: USART0/TXD
+        pad: PB2
+        label: TXD
+    clocks:
+      domain_group:
+        nodes:
+        - name: USART
+          input: Main Clock (CLK_MAIN)
+          external: false
+          external_frequency: 0
+        configuration:
+          usart_clock_source: Main Clock (CLK_MAIN)
+  FLASH_0:
+    user_label: FLASH_0
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::NVMCTRL::driver_config_definition::NVMCTRL.Basic::Drivers:NVMCTRL:Basic
+    functionality: Flash
+    api: Drivers:NVMCTRL:Basic
+    configuration:
+      nvmctrl_ctrlb_apcwp: false
+      nvmctrl_ctrlb_bootlock: false
+      nvmctrl_intctrl_eeready: false
+      nvmctrl_irq_driven: false
+      nvmctrl_relocate_flash_functions: false
+    optional_signals: []
+    variant: null
+    clocks:
+      domain_group: null
+  CPUINT:
+    user_label: CPUINT
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::CPUINT::driver_config_definition::CPUINT::Drivers:CPUINT:Init
+    functionality: System
+    api: Drivers:CPUINT:Init
+    configuration:
+      cpuint_ctrla_cvt: false
+      cpuint_ctrla_ivsel: false
+      cpuint_ctrla_lvl0rr: false
+      cpuint_global_interrupt: true
+      cpuint_lvl0pri_lvl0pri: 0
+      cpuint_lvl1vec_lvl1vec: 0
+      inc_isr_harness: false
+    optional_signals: []
+    variant: null
+    clocks:
+      domain_group: null
+  SLPCTRL:
+    user_label: SLPCTRL
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::SLPCTRL::driver_config_definition::SLPCTRL::Drivers:SLPCTRL:Init
+    functionality: System
+    api: Drivers:SLPCTRL:Init
+    configuration:
+      slpctrl_ctrla_sen: true
+      slpctrl_ctrla_smode: Standby Mode
+    optional_signals: []
+    variant: null
+    clocks:
+      domain_group: null
+  BOD:
+    user_label: BOD
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::BOD::driver_config_definition::BOD::Drivers:BOD:Init
+    functionality: System
+    api: Drivers:BOD:Init
+    configuration:
+      bod_ctrla_sleep: Disabled
+      bod_intctrl_vlmcfg: Interrupt when supply goes above VLM level
+      bod_intctrl_vlmie: false
+      bod_vlmctrla_vlmlvl: VLM threshold 5% above BOD level
+      inc_isr_harness: false
+    optional_signals: []
+    variant: null
+    clocks:
+      domain_group:
+        nodes:
+        - name: BOD
+          input: 32KHz divided by 32
+          external: false
+          external_frequency: 0
+        configuration:
+          bod_clock_source: 32KHz divided by 32
+pads:
+  MIC:
+    name: PA6
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PA6
+    mode: Analog
+    user_label: MIC
+    configuration: null
+  ENC_1A:
+    name: PB7
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PB7
+    mode: Digital input
+    user_label: ENC_1A
+    configuration:
+      pad_pull_config: Pull-up
+  ENC_1B:
+    name: PB6
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PB6
+    mode: Digital input
+    user_label: ENC_1B
+    configuration:
+      pad_pull_config: Pull-up
+  ENC_2A:
+    name: PB5
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PB5
+    mode: Digital input
+    user_label: ENC_2A
+    configuration:
+      pad_pull_config: Pull-up
+  ENC_2B:
+    name: PB4
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PB4
+    mode: Digital input
+    user_label: ENC_2B
+    configuration:
+      pad_pull_config: Pull-up
+  PB3:
+    name: PB3
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PB3
+    mode: Digital input
+    user_label: PB3
+    configuration: null
+  PB2:
+    name: PB2
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PB2
+    mode: Digital output
+    user_label: PB2
+    configuration: null
+  BUTTON:
+    name: PB1
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PB1
+    mode: Digital input
+    user_label: BUTTON
+    configuration:
+      pad_pull_config: Pull-up
+  DATA:
+    name: PB0
+    definition: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::pad::PB0
+    mode: Digital output
+    user_label: DATA
+    configuration: null
+toolchain_options:
+- definition:
+    identifier: Atmel:ATtiny417_81x_161x_321x_drivers:1.0.0::ATtiny3217-MFR::environment_definition::All:Atmel.Studio:7.0.0
+  configuration:
+    compiler_config:
+      avrgcc_compiler_miscellaneous_OtherFlags: -std=gnu99
+    linker_config:
+      avrgcc_linker_miscellaneous_LinkerFlags: ''
