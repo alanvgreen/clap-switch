@@ -4,10 +4,10 @@ versions:
   api: '1.0'
   backend: 1.5.122
   commit: 820baecf7dd115d94b0d42ee3b0b9d6ba2da7113
-  content: 1.0.1465
+  content: 1.0.1507
   content_pack_name: acme-packs-all
   format: '2'
-  frontend: 1.5.1826
+  frontend: 1.5.1877
 board:
   identifier: CustomBoard
   device: ATtiny3217-MFR
@@ -164,7 +164,7 @@ drivers:
     functionality: USART
     api: Drivers:USART:Basic
     configuration:
-      baud_rate: 9600
+      baud_rate: 115200
       ctrla_abeie: false
       ctrla_dreie: false
       ctrla_lbme: false
@@ -189,7 +189,7 @@ drivers:
       driver_rx_buffer_size: '8'
       driver_tx_buffer_size: '8'
       evctrl_irei: false
-      printf_support: false
+      printf_support: true
       rxplctrl_rxpl: 0
       txplctrl_txpl: 0
     optional_signals: []

@@ -19,6 +19,7 @@
 #include <util/delay.h>
 #include <avr/pgmspace.h>
 #include <utils/atomic.h>
+#include <stdio.h>
 
 //////////////////////////////////////////////////////////////////////
 // Current tick updates 1024 times per second - approximately equal
@@ -41,16 +42,8 @@ ISR(RTC_PIT_vect)
 //////////////////////////////////////////////////////////////////////
 // Configuration related routines
 
-// Hue of light - represents entire 360 degrees in 6 regions, 
-// each with 32 steps = 192 valid hues. Storing in 6 regions simplifies
-// calculations
-// TODO: just store as an int8_t - it will simplify the increment code greatly.
-typedef struct {
-	unsigned region : 3; // range 0 - 5
-	unsigned val : 5;    // range 0 - 31
-} Hue;
-
 #define MAX_BRIGHT 64
+#define MAX_BRIGHT 191
 
 // Values to save in EEPROM
 typedef struct {
@@ -58,15 +51,18 @@ typedef struct {
 	bool on : 1;
 	// Brightness range 1-MAX_BRIGHT
 	uint8_t brightness; 
-	// Hue to take
-	Hue hue;
+	// Hue to take range is 0-191, 192 being divisible into 6 regions of 32 steps each
+	uint8_t hue;
 } Eeprom;
 Eeprom config;
 
 void readConfig() {
 	FLASH_0_read_eeprom_block(0, (uint8_t *) &config, sizeof(Eeprom));
-	if (config.brightness < 1 || config.brightness > MAX_BRIGHT) {
+	if (config.brightness > MAX_BRIGHT) {
 		config.brightness = 8;
+	}
+	if (config.hue > MAX_HUE) {
+		config.hue = 0;
 	}
 }
 
@@ -89,7 +85,7 @@ void configChanged() {
 
 // Write the config, if necessary
 void maybeWriteConfig() {
-	if (config_written && tick_millis > config_change_millis + CONFIG_WAIT_MS) {
+	if (!config_written && tick_millis > config_change_millis + CONFIG_WAIT_MS) {
 		FLASH_0_write_eeprom_block(0, (uint8_t *) &config, sizeof(Eeprom));
 		config_written = true;
 	}
@@ -114,32 +110,16 @@ void updateBrightness(int8_t in) {
 // Increments hue if in is +1, decrements hue if input is -1
 // Return true if hue was updated
 void updateHue(int8_t in) {
-	if (in == -1) {
-		if (config.hue.val == 0) {
-			config.hue.val = 31;
-			if (config.hue.region == 0) {
-				config.hue.region = 5;
-			} else {
-				config.hue.region--;
-			}
-		} else {
-			config.hue.val--;
-		}
-		configChanged();
+	if (in == 0) {
+		return;
 	}
-	if (in == 1) {
-		if (config.hue.val == 31) {
-			config.hue.val = 0;
-			if (config.hue.region == 5) {
-				config.hue.region = 0;
-			} else {
-				config.hue.region++;
-			}
-		} else {
-			config.hue.val++;
-		}
-		configChanged();
+	config.hue += in;
+	if (config.hue == 255) {
+		config.hue = 191;
+	} else if (config.hue == 192) {
+		config.hue = 0;
 	}
+	configChanged();
 }
 
 
@@ -165,41 +145,42 @@ int8_t checkTouch(int8_t in) {
 	return in;
 }
 
-// How long to wait after a touch to begin detecting claps
-#define TOUCH_TO_CLAP_MIN_MS 500
+//////////////////////////////////////////////////////////////////////
+// Mic + Clap detection
 
-// How long to wait after a clap to be sure it wasn't a touch
-#define CLAP_TO_TOUCH_MIN_MS 100
+// This is the expected mid-level audio reading (1.8/2.5 * 1024 / 2)
+#define MID_READING 369
 
-// Minimum and maximum time between claps
-#define CLAP_INTER_MIN 200
-#define CLAP_INTER_MAX 700
+// >= this value is a loud value for audio_squares
+#define LOUD_THRESHOLD 50000 
 
-// Maximum length of a clap. If a clap goes longer than this,
-// we assume it was some other noise
-#define CLAP_LEN_MAX 100
+// <= this is a quiet value for audio_squares
+#define QUIET_THRESHOLD 20000
 
-// Threshold for ADC to decide it was a clap
-#define CLAP_THRESHOLD 300
+// Accumulates squares of readings
+uint32_t audio_squares;
+
+// Number of samples in squares
+uint8_t sample_count;
+
+#define NUM_SAMPLES_PER_THRESHOLD 16
 
 typedef enum {
-	NO_CLAP, // reset - waiting for a cap
-	FIRST_CLAP, // have a first clap - waiting for second or touch
-	DOUBLE_CLAP, // have a second clap - waiting for touch timeout
-} ClapState;
-ClapState clap_state;
+	QUIET = 0,
+	MID = 1,
+	LOUD = 2,
+} AudioLevel;
 
-// Last clap detect time
-uint32_t last_clap_millis;
+// Buffer. Each entry represent 16ms of data, so whole buffer is 128 * 16ms ~= 2s
+#define LEVEL_BUFFER_LEN 128
+AudioLevel level_buffer[LEVEL_BUFFER_LEN];
+uint8_t level_buffer_index = 0;
 
-// Average accumulator - upper 16 bits hold the average
-uint32_t mic_avg_level_accum;
+// Do not detect claps until tick_millis is > this value
+uint32_t clap_lockout_millis = 0;
 
-// Average total energy - 10 bits
-uint32_t mic_avg_energy_accum;
-
-// Last energy
-uint8_t mic_last_energy;
+// How long to lock out
+#define CLAP_LOCKOUT_MS 2000
 
 // Returns 0..1023 -- actually only 3/4 of the range due to 
 // 1.8V max, measured against 2.5 V reference
@@ -207,78 +188,184 @@ uint16_t micRawRead() {
 	return ADC_0_get_conversion(ADC_MUXPOS_AIN6_gc);
 }
 
-// Get top 16 bits of avg accumulator
-static inline uint16_t micGetAvgLevel() {
-	return mic_avg_level_accum >> 16;
+AudioLevel calculateCurrentLevel() {
+	if (audio_squares >= LOUD_THRESHOLD) {
+		return LOUD;
+	} else if (audio_squares <= QUIET_THRESHOLD) {
+		return QUIET;
+	} 
+	return MID;
 }
 
-// Take 256 readings over quarter of a second
-void micCalibrateAvgLevel() {
-	uint32_t total = 0;
-	for (uint16_t i = 0; i < 256; i++) {
-		total += micRawRead();
-		_delay_ms(1);
+inline uint8_t bufferIndexSubtract(uint8_t index, uint8_t amount) {
+	if (amount > index) {
+		return LEVEL_BUFFER_LEN - (amount - index);
+	} else {
+		return index - amount;
 	}
-	mic_avg_level_accum = total * 256;
 }
 
-// Update with new reading
-void micUpdateAvgLevel(uint16_t reading) {
-	mic_avg_level_accum -= micGetAvgLevel();
-	mic_avg_level_accum += reading;
-}
-
-// Detects double claps - returns true on double-clap
-bool clapDetect(uint16_t reading) {
-	// Any touch forces reset for TOUCH_TO_CLAP_MIN_MS
-	if (tick_millis < last_touched_millis + TOUCH_TO_CLAP_MIN_MS) {
-		clap_state = NO_CLAP;
-		return false;
+inline uint8_t bufferIndexAdd(uint8_t index, uint8_t amount) {
+	uint8_t result = index + amount;
+	if (result >= LEVEL_BUFFER_LEN) {
+		result -= LEVEL_BUFFER_LEN;
 	}
-	
-	// Are we detecting a clap right now?
-	uint16_t avg = micGetAvgLevel();
-	bool detected = reading <= avg - CLAP_THRESHOLD || reading >= avg + CLAP_THRESHOLD;
-	
-	// What to do depends on current state, the time, and whether a 
-	// clap has been detected
-	if (clap_state == NO_CLAP) {
-		if (detected) {
-			clap_state = FIRST_CLAP;
-			last_clap_millis = tick_millis;
-		}
-		return false;
-	} else if (clap_state == FIRST_CLAP) {
-		if (tick_millis < last_clap_millis + CLAP_INTER_MIN) {
-			// Just waiting
-		} else if (tick_millis < last_clap_millis + CLAP_INTER_MAX) {
-			if (detected) {
-				clap_state = DOUBLE_CLAP;
-				last_clap_millis = tick_millis;
-			}
+	return result;
+}
+
+inline uint8_t bufferIndexNext(uint8_t index) {
+	return bufferIndexAdd(index, 1);
+}
+
+void addToBuffer(AudioLevel level) {
+	// Increment index, mod LEVEL_BUFFER_LEN
+	level_buffer_index++;
+	if (level_buffer_index >= LEVEL_BUFFER_LEN) {
+		level_buffer_index = 0;
+	}
+	level_buffer[level_buffer_index] = level;
+}
+
+// For debugging - dump the buffer
+void dumpBuffer() {
+	puts_P(PSTR("\n\n\n"));
+	printf_P(PSTR("%02hx\n"), level_buffer_index);
+	printf_P(PSTR("%06lx\n"), audio_squares);
+	uint8_t i = bufferIndexNext(level_buffer_index);
+	for ( uint8_t count = 0; count < LEVEL_BUFFER_LEN; count++) {
+		if (level_buffer[i] == QUIET) {
+			putchar('.');
+		} else if(level_buffer[i] == LOUD) {
+			putchar('X');
 		} else {
-			// Timed out with no new clap detected
-			clap_state = NO_CLAP;
+			putchar('_');
 		}
-		return false;
-	} else { // clap_state = DOUBLE_CLAP
-		if (tick_millis > last_clap_millis + CLAP_TO_TOUCH_MIN_MS) {
-			// Timed out without touch - must be a clap
-			clap_state = NO_CLAP;
-			return true;
-		}
-		return false;
+		i = bufferIndexNext(i);
+	}
+	puts_P(PSTR("\n---\n---\n"));
+}
+
+// For debugging
+void maybeDumpBuffer() {
+	if (level_buffer_index == LEVEL_BUFFER_LEN - 1) {
+		dumpBuffer();
 	}
 }
+
+
+// All these are defined in terms of buffer indexes
+#define POST_CLAP_MIN_QUIET 8
+
+// Return true if found number entries consisting of allowed levels between min and max, going backward in buffer
+// Decrements index as it goes.
+bool checkPrior(uint8_t *i, uint8_t min_required, uint8_t max_allowed, bool quiet_allowed, bool mid_allowed, bool loud_allowed) {
+	uint8_t count = 0;
+	uint8_t end = bufferIndexSubtract(*i, max_allowed);
+	bool condition_met = true;
+	while (*i != end && condition_met) {
+		AudioLevel level = level_buffer[*i];
+		condition_met = (level == QUIET && quiet_allowed)  || (level == MID && mid_allowed) || (level == LOUD && loud_allowed);
+		if (condition_met) {
+			count++;
+			*i = bufferIndexSubtract(*i, 1);
+		}
+	}
+	
+	return count >= min_required;
+}
+
+// Analyze the buffer. Return true if detected a double clap.
+// A double clap looks like this, approximately, in regex notation:
+// . = QUIET, _ = MID, X = LOUD
+// .{32},_?X[_X]{0, 7}[._]{0,6}..{2,50}_?X[_X]{0, 8}X[._]{0,6}.{8}
+bool analyzeBuffer() {
+	uint8_t i = level_buffer_index;
+	
+	// This code looks backward over the buffer.
+	
+#define CHECK(min, max, q, m, l) \
+	if (!checkPrior(&i, min, max, q, m, l)) { return false; }
+	// Special check: the actual clap must start with a loud, or have its second be a loud. The rest can be mids.
+#define CHECK_STARTED_LOUD \
+	if (!((level_buffer[bufferIndexAdd(i, 1)] == LOUD) || (level_buffer[bufferIndexAdd(i, 2)] == LOUD)) ) { \
+		return false; \
+	} 
+
+	// Ends with 8 quiet periods	
+	CHECK(8, 8, 1, 0, 0);
+
+	// Ramp down MID/QUIET
+	CHECK(0, 1, 0, 1, 0);
+	CHECK(0, 5, 1, 1, 0);
+	
+	// At least one LOUD
+	CHECK(1, 1, 0, 0, 1);
+	
+	// Mix of mids and louds up to 9 periods - allows for some echo
+	// This is the actual clap, so it must have started loud
+	CHECK(0, 9, 0, 1, 1);
+	CHECK_STARTED_LOUD;
+
+	// Inter-clap quiet
+	CHECK(2, 50, 1, 0, 0);
+	
+	// Ramp down MID/QUIET
+	CHECK(0, 1, 0, 1, 0);
+	CHECK(0, 5, 1, 1, 0);
+
+	// At least one LOUD
+	CHECK(1, 1, 0, 0, 1);
+
+	// Mix of mids and louds up to 9 periods - allows for some echo
+	// This is the actual clap, so it must have started loud
+	CHECK(0, 9, 0, 1, 1);
+	CHECK_STARTED_LOUD;
+
+	// Must have had quiet beforehand	
+	CHECK(32, 32, 1, 0, 0);
+		
+#undef CHECK
+
+	clap_lockout_millis = tick_millis + CLAP_LOCKOUT_MS;
+	return true;	
+	
+}
+
 
 // Read mic, run processing return true if double-clap detected
+// There are several parts to this
+// (a) assemble 16 1-ms samples into a value related to root mean squares, but
+//     not rooted or meaned.
+// (b) Once an RMS block value has been assembled, determine if level is QUIET,
+//     LOUD or MID and record in a circular buffer.
+// (c) Detect whether there have been two claps in a row by examining record.
+// (d) Lock out any further detection for a period.
 bool micRead() {
+	// diff will be in range 0-184 or 185
 	uint16_t reading = micRawRead();
-	micUpdateAvgLevel(reading);
-	return clapDetect(reading);
+	int8_t diff = (reading > MID_READING ? reading - MID_READING : MID_READING - reading) / 2;
+	
+	// (a) calculate RMS, squared * 16
+	audio_squares += diff * diff;
+	sample_count++;
+	if (sample_count == NUM_SAMPLES_PER_THRESHOLD) {
+		// (b) Once we have a block, record it in buffer.
+		addToBuffer(calculateCurrentLevel());
+		maybeDumpBuffer();
+		audio_squares = 0;
+		sample_count = 0;
+		
+		// (d) Lock out any further detection
+		if (clap_lockout_millis > tick_millis) {
+			return false;
+		}
+		
+		// (c) analyze buffer to detect double claps
+		return analyzeBuffer();
+	}
+	
+	return false;
 }
-
-
 
 //////////////////////////////////////////////////////////////////////
 // Read controls on UI
@@ -331,6 +418,7 @@ int8_t readButton() {
 
 // Send a single byte out to WS2812b LEDs on PB0
 // Assumes 20MHz CPU and that interrupts are disabled
+// For timing see https://wp.josh.com/2014/05/13/ws2812-neopixels-are-not-so-finicky-once-you-get-to-know-them/
 void sendByte(uint8_t v) {
 	// Working with PB0
 	register uint8_t on = VPORTB_OUT | 1;
@@ -341,9 +429,9 @@ void sendByte(uint8_t v) {
 			__builtin_avr_delay_cycles(13); // 0.65uS
 			VPORTB_OUT = off;
 			__builtin_avr_delay_cycles(8); // 0.4uS
-			} else {
+		} else {
 			VPORTB_OUT = on;
-			__builtin_avr_delay_cycles(6); //0.3uS
+			__builtin_avr_delay_cycles(6); // 0.3uS
 			VPORTB_OUT = off;
 			__builtin_avr_delay_cycles(15); // 0.75uS
 			
@@ -374,7 +462,7 @@ void maybeUpdateLeds() {
 	}
 	if (config.on) {
 		// https://en.wikipedia.org/wiki/HSL_and_HSV#HSL_to_RGB
-		// v is L (lowercase l looks like 1 and is confusing). 
+		// v is L (because lowercase l looks like 1 and is confusing). 
 		// v range 0-255 instead of 0-1. 
 		uint16_t v = (config.brightness * config.brightness) / 16;
 		v = min(v, 255); // in case config.brightness == 64
@@ -387,10 +475,12 @@ void maybeUpdateLeds() {
 		// Calculate chroma - 0 to 255.
 		uint16_t c = (255 - abs((2 * (int16_t) v) - 255)); 
 		// x is 0 - 255
-		uint16_t xt = 8 * (config.hue.region & 1 ? config.hue.val : 32-config.hue.val);
-		uint16_t x = (c * (256 - xt)) >> 8; // scale x down to range 0 to 256
+		uint8_t hue_region = config.hue >> 5; // top 3 bits of region are hue range (0-5)
+		uint8_t hue_val = config.hue & 0x1f; // bottom 5 bits are val
+		uint16_t xt = 8 * (hue_region & 1 ? hue_val : 32-hue_val);
+		uint16_t x = (c * (256 - xt)) >> 8; // scale x down to range 0 to 255
 		uint8_t r = 0, g = 0, b = 0;
-		switch (config.hue.region ) {
+		switch (hue_region) {
 		case 0: r = c; g = x; break;
 		case 1: r = x; g = c; break;
 		case 2: g = c; b = x; break;
@@ -416,18 +506,17 @@ void maybeUpdateLeds() {
 
 int main(void)
 {
-	
 	// Initializes MCU, drivers and middleware 
 	atmel_start_init();
 	readConfig();
 	maybeUpdateLeds();
-	_delay_ms(500);
-	micCalibrateAvgLevel();
+	
+	USART_0_enable();
 
 	uint32_t last_awake = tick_millis;
 	while (1) {
 		// Sleep until there's a new millisecond
-                // CPU wakes on RTC interrupt.
+		// CPU wakes on RTC interrupt.
 		while (last_awake == tick_millis) {
 			__builtin_avr_sleep();
 		}
@@ -441,9 +530,11 @@ int main(void)
 		
 		// Read the encoders - update hue and brightness if lamp on
 		int8_t re1 = checkTouch(readEncoder1());
-		updateBrightness(re1);
 		int8_t re2 = checkTouch(readEncoder2());
-		updateHue(re2);
+		if (config.on) {
+			updateBrightness(re1);
+			updateHue(re2);
+		}
 		
 		// Read mic and determine whether there has been a double clap
 		bool double_clap = micRead();
