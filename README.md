@@ -12,6 +12,9 @@ employed by Google, this is a personal project.
 Speaking of which, I'm not a professional hardware engineer, just a very
 enthusiastic hacker. Let me know if you find bugs, I'll try to fix them.
 
+This project is documented on hackaday.io at
+https://hackaday.io/project/165448-happy-clap-switch.
+
 ## Software
 
 The implementation consists of three files:
